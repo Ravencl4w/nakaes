@@ -1,0 +1,10 @@
+# Dominio principal - Aplicación React
+https://nakaesinmobiliaria.com {
+    reverse_proxy web:80
+}
+
+# Subdominio n8n
+https://n8n.nakaesinmobiliaria.com {
+    reverse_proxy n8n:5678
+}
+

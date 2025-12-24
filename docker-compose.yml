@@ -43,7 +43,19 @@ services:
       retries: 5
 
   # ----------------------------------------
-  # 3. N8N CORE SERVICE
+  # 3. WEB APPLICATION (React/Vite)
+  # ----------------------------------------
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nakaes_web
+    restart: unless-stopped
+    networks:
+      - nakaes_network
+
+  # ----------------------------------------
+  # 4. N8N CORE SERVICE
   # ----------------------------------------
   n8n:
     image: n8nio/n8n:latest
@@ -61,19 +73,18 @@ services:
       - QUEUE_BULL_REDIS_HOST=redis
       - QUEUE_BULL_REDIS_PORT=6379
       # Configuración de Acceso y Dominio (CRUCIAL para HTTPS/Proxy)
-      - N8N_HOST=nakaesinmobiliaria.com  # <--- TU DOMINIO
+      - N8N_HOST=n8n.nakaesinmobiliaria.com  # <--- Subdominio para n8n
       - N8N_PORT=5678
       - N8N_PROTOCOL=https               # <--- Indica a n8n que use HTTPS
-      - WEBHOOK_URL=https://nakaesinmobiliaria.com/ # <--- URL de Webhooks
+      - WEBHOOK_URL=https://n8n.nakaesinmobiliaria.com/ # <--- URL de Webhooks
       # Seguridad
       - N8N_BASIC_AUTH_ACTIVE=true
       - N8N_BASIC_AUTH_USER=admin
       - N8N_BASIC_AUTH_PASSWORD=admin
       - N8N_SECURE_COOKIE=true           # <--- Mantenemos esto en true, gracias al proxy
       - GENERIC_TIMEZONE=America/Lima    # <--- O tu zona horaria
-    # NOTA: Expongo el puerto solo a localhost por seguridad, para que Caddy lo use.
-    ports:
-      - "127.0.0.1:5678:5678"
+    # NOTA: El puerto 5678 solo es accesible a través de la red Docker (nakaes_network)
+    # Caddy accede a través de la red interna, no se expone al exterior.
     volumes:
       - n8n_data:/home/node/.n8n
     networks:
@@ -85,7 +96,7 @@ services:
         condition: service_healthy
         
   # ----------------------------------------
-  # 4. CADDY (Proxy Inverso y HTTPS Automático)
+  # 5. CADDY (Proxy Inverso y HTTPS Automático)
   # ----------------------------------------
   caddy:
     image: caddy:latest
@@ -95,16 +106,19 @@ services:
     ports:
       - "80:80"
       - "443:443"
-    # CRUCIAL: Configura Caddy para que envíe tráfico de tu dominio a n8n
-    command: caddy reverse-proxy --from https://nakaesinmobiliaria.com --to http://n8n:5678
+    # Configuración de Caddy usando Caddyfile
+    command: caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
     volumes:
       # Para que Caddy guarde los certificados SSL y su configuración
       - caddy_data:/data
       - caddy_config:/config
+      # Montar Caddyfile
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
     networks:
       - nakaes_network
     depends_on:
-      - n8n # Asegura que n8n esté activo antes de intentar proxy
+      - web  # Asegura que la app web esté activa
+      - n8n  # Asegura que n8n esté activo antes de intentar proxy
     
 # ----------------------------------------
 # VOLUMES Y NETWORKS
